@@ -16,3 +16,5 @@ Functions and their purpose:
 - Clear Licenses (deletes all license and term data; does not clear any credentials)
 - Clear Credentials (deletes the URL and API Token Key)
 - Search bar: use Elastic Search to search through the license and term data (not sure how well it works for terms)
+
+Note: Colt uses Helmet to protect against well-known web application based vulnerabilities.  
