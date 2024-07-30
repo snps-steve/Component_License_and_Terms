@@ -1,4 +1,3 @@
-// src/components/PaginationControls.tsx
 import React from 'react';
 import { ChevronDoubleLeftIcon, ChevronDoubleRightIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 

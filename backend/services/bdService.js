@@ -1,10 +1,13 @@
-// routes/bdService.js
 const axios = require('axios');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+const dbPath = path.resolve(__dirname, 'bdDatabase.db');
+
 const {
   saveLicensesToDatabase,
   saveLicenseTermsToDatabase,
   clearLicensesFromDatabase,
-  fetchLicensesFromDatabase
+  fetchLicensesFromDatabase,
 } = require('../database/database');
 
 const MAX_RETRIES = 5;
@@ -25,6 +28,10 @@ const authenticate = async (url, token) => {
     const csrfToken = authResponse.headers['x-csrf-token'];
 
     console.log('Authentication response:', authResponse.data);
+
+    // Store tokens globally or in a higher scope variable
+    global.bearerToken = bearerToken;
+    global.csrfToken = csrfToken;
 
     return { bearerToken, csrfToken };
   } catch (error) {
@@ -141,15 +148,17 @@ const fetchAndStoreLicenses = async (url, token) => {
 };
 
 // Function to fetch license terms for each license and store them in the database
-const fetchAndStoreLicenseTermsInBackground = async (url, token) => {
+const fetchAndStoreLicenseTermsInBackground = async () => {
   try {
     const licenses = await fetchLicensesFromDatabase();
     for (const license of licenses) {
-      const termsUrl = `${url}/api/licenses/${license.id}/license-terms`;
+      const termsUrl = license.termsUrl;
       console.log(`Fetching terms for license: ${license.id} from URL: ${termsUrl}`);
       try {
-        const terms = await fetchLicenseTerms(termsUrl, token);
-        await saveLicenseTermsToDatabase(terms.map(term => ({ ...term, licenseId: license.id })));
+        const terms = await fetchLicenseTerms(termsUrl, { bearerToken: global.bearerToken, csrfToken: global.csrfToken });
+        const termsWithLicenseId = terms.map(term => ({ ...term, licenseId: license.id }));
+        console.log(`Fetched terms for license ${license.id}:`, termsWithLicenseId);
+        await saveLicenseTermsToDatabase(termsWithLicenseId);
         console.log(`Successfully fetched and stored terms for license: ${license.id}`);
       } catch (error) {
         console.error(`Failed to fetch license terms for license ${license.id}:`, error.message);

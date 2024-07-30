@@ -1,22 +1,31 @@
+// src/components/LoadingPage.tsx
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import LoadingIndicator from './LoadingIndicator';
+import { useNavigate } from 'react-router-dom';
 
-interface LoadingPageProps {
-  message: string;
+interface LicenseTerm {
+  licenseId: string;
+  name: string;
+  description: string;
+  responsibility: string;
 }
 
-const LoadingPage: React.FC<LoadingPageProps> = ({ message }) => {
+const LoadingPage: React.FC<{ message: string }> = ({ message }) => {
   const [loadingMessage, setLoadingMessage] = useState(message);
   const [licenses, setLicenses] = useState<string[]>([]);
+  const [licenseTerms, setLicenseTerms] = useState<Record<string, LicenseTerm[]>>({});
+  const navigate = useNavigate();
 
   useEffect(() => {
     const loadLicenses = async () => {
       try {
-        const response = await axios.post('/api/bd/load-licenses');
+        const response = await axios.post('/api/bd/seed-licenses');
         if (response.data.success) {
           setLoadingMessage('Licenses loaded successfully!');
           setLicenses(response.data.licenses);
+          loadLicenseTerms(response.data.licenses);
+          navigate('/license-list'); 
         }
       } catch (error) {
         console.error('Failed to load licenses', error);
@@ -24,8 +33,22 @@ const LoadingPage: React.FC<LoadingPageProps> = ({ message }) => {
       }
     };
 
+    const loadLicenseTerms = async (licenseIds: string[]) => {
+      try {
+        const termPromises = licenseIds.map(id => axios.get(`/api/bd/licenses/${id}/terms`));
+        const termResponses = await Promise.all(termPromises);
+        const newLicenseTerms = termResponses.reduce((acc, response, index) => {
+          acc[licenseIds[index]] = response.data;
+          return acc;
+        }, {} as Record<string, LicenseTerm[]>);
+        setLicenseTerms(newLicenseTerms);
+      } catch (error) {
+        console.error('Failed to load license terms', error);
+      }
+    };
+
     loadLicenses();
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">

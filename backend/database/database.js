@@ -24,10 +24,17 @@ const encrypt = (text, key) => {
 };
 
 const decrypt = (text, key) => {
+  if (!text) {
+    throw new Error('The text to decrypt cannot be null or undefined');
+  }
+  if (!key) {
+    throw new Error('The key to decrypt cannot be null or undefined');
+  }
+
   const textParts = text.split(':');
   const iv = Buffer.from(textParts.shift(), 'hex');
   const encryptedText = Buffer.from(textParts.join(':'), 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv); // Define decipher
+  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv); 
   let decrypted = decipher.update(encryptedText);
 
   decrypted = Buffer.concat([decrypted, decipher.final()]);
@@ -96,28 +103,22 @@ const initializeDatabase = () => {
             if (err) {
               reject(err);
             } else {
-              db.run(`CREATE INDEX IF NOT EXISTS idx_license_name ON licenses(name)`, (err) => {
+              db.all(`PRAGMA table_info(licenses)`, [], (err, columns) => {
                 if (err) {
                   reject(err);
                 } else {
-                  db.all(`PRAGMA table_info(credentials)`, [], (err, columns) => {
-                    if (err) {
-                      reject(err);
-                    } else {
-                      const hasEncryptionKey = columns.some(col => col.name === 'encryption_key');
-                      if (!hasEncryptionKey) {
-                        db.run(`ALTER TABLE credentials ADD COLUMN encryption_key TEXT`, (err) => {
-                          if (err) {
-                            reject(err);
-                          } else {
-                            resolve(db);
-                          }
-                        });
+                  const hasTermsUrl = columns.some(col => col.name === 'termsUrl');
+                  if (!hasTermsUrl) {
+                    db.run(`ALTER TABLE licenses ADD COLUMN termsUrl TEXT`, (err) => {
+                      if (err) {
+                        reject(err);
                       } else {
                         resolve(db);
                       }
-                    }
-                  });
+                    });
+                  } else {
+                    resolve(db);
+                  }
                 }
               });
             }
@@ -135,12 +136,16 @@ const getCredentialsFromDatabase = () => {
       if (err) {
         reject(err);
       } else if (row) {
-        const key = row.encryption_key;
-        resolve({
-          url: decrypt(row.url, key),
-          token: decrypt(row.token, key),
-          encryption_key: key
-        });
+        try {
+          const key = row.encryption_key;
+          resolve({
+            url: row.url ? decrypt(row.url, key) : null,
+            token: row.token ? decrypt(row.token, key) : null,
+            encryption_key: key
+          });
+        } catch (error) {
+          reject(`Decryption error: ${error.message}`);
+        }
       } else {
         resolve(null);
       }
@@ -154,15 +159,19 @@ const updateCredentials = (url, token) => {
   return new Promise((resolve, reject) => {
     const db = new sqlite3.Database(dbPath);
     db.serialize(() => {
-      db.run(`DELETE FROM credentials`);
-      db.run(`INSERT INTO credentials (url, token, encryption_key) VALUES (?, ?, ?)`,
-        [encrypt(url, encryptionKey), encrypt(token, encryptionKey), encryptionKey], function (err) {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        });
+      db.run(`DELETE FROM credentials`, [], (err) => {
+        if (err) {
+          return reject(err);
+        }
+        db.run(`INSERT INTO credentials (url, token, encryption_key) VALUES (?, ?, ?)`,
+          [encrypt(url, encryptionKey), encrypt(token, encryptionKey), encryptionKey], function (err) {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
+      });
     });
     db.close();
   });
@@ -182,11 +191,13 @@ const clearCredentials = () => {
   });
 };
 
-const saveCredentialsToDatabase = async (url, token) => {
+const saveCredentialsToDatabase = (url, token) => {
+  const encryptionKey = generateEncryptionKey();
   return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(dbPath);
     db.run(
-      `INSERT OR REPLACE INTO credentials (id, url, token) VALUES (1, ?, ?)`,
-      [url, token],
+      `INSERT OR REPLACE INTO credentials (id, url, token, encryption_key) VALUES (1, ?, ?, ?)`,
+      [encrypt(url, encryptionKey), encrypt(token, encryptionKey), encryptionKey],
       function (err) {
         if (err) {
           return reject(err);
@@ -194,17 +205,32 @@ const saveCredentialsToDatabase = async (url, token) => {
         resolve();
       }
     );
+    db.close();
   });
 };
 
 const getLicenseCount = () => {
   return new Promise((resolve, reject) => {
     const db = new sqlite3.Database(dbPath);
-    db.get(`SELECT COUNT(*) as count FROM licenses`, [], (err, row) => {
+    const query = `
+      SELECT
+        COUNT(*) as totalLicenses,
+        SUM(CASE WHEN ownership = 'OPEN_SOURCE' THEN 1 ELSE 0 END) as openSourceCount,
+        SUM(CASE WHEN ownership = 'PROPRIETARY' THEN 1 ELSE 0 END) as proprietaryCount,
+        SUM(CASE WHEN ownership = 'UNKNOWN' THEN 1 ELSE 0 END) as unknownCount
+      FROM licenses
+    `;
+    db.get(query, [], (err, row) => {
       if (err) {
         reject(err);
       } else {
-        resolve(row.count);
+        console.log('Database result:', row);
+        resolve({
+          totalLicenses: row.totalLicenses,
+          openSourceCount: row.openSourceCount,
+          proprietaryCount: row.proprietaryCount,
+          unknownCount: row.unknownCount
+        });
       }
     });
     db.close();
@@ -218,8 +244,8 @@ const saveLicensesToDatabase = async (licenses) => {
     db.serialize(async () => {
       try {
         const stmt = db.prepare(`
-          INSERT OR REPLACE INTO licenses (id, name, licenseFamily, ownership, licenseStatus, licenseSource, inUse)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT OR REPLACE INTO licenses (id, name, licenseFamily, ownership, licenseStatus, licenseSource, inUse, termsUrl)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         for (const license of licenses) {
@@ -230,7 +256,8 @@ const saveLicensesToDatabase = async (licenses) => {
             license.ownership,
             license.licenseStatus,
             license.licenseSource,
-            license.inUse
+            license.inUse,
+            license.termsUrl
           ]);
         }
 
@@ -259,6 +286,7 @@ const saveLicenseTermsToDatabase = async (licenseTerms) => {
         `);
 
         for (const term of licenseTerms) {
+          console.log('Saving license term:', term);
           await runWithRetry(stmt, [
             term.licenseId,
             term.name,
@@ -268,10 +296,15 @@ const saveLicenseTermsToDatabase = async (licenseTerms) => {
         }
 
         stmt.finalize((err) => {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            console.error('Failed to finalize statement:', err);
+            reject(err);
+          } else {
+            resolve();
+          }
         });
       } catch (err) {
+        console.error('Failed to save license terms:', err);
         reject(err);
       }
     });

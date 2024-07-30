@@ -88,7 +88,7 @@ const SetupForm: React.FC<SetupFormProps> = ({ onSaveCredentials, onSetupComplet
       setSaveMessage('Credentials have been saved');
       onSaveCredentials(url, token);
       onSetupComplete();
-      navigate('/license-list'); // Ensure navigation to license list
+      navigate('/loading'); // Navigate to LoadingPage
     } catch (error) {
       setSaveMessage('Failed to save credentials');
     }

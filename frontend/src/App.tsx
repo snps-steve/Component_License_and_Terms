@@ -1,12 +1,12 @@
-
 // src/App.tsx
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Routes, Route, Navigate } from 'react-router-dom'; // Import Navigate here
+import { useNavigate, Routes, Route, Navigate } from 'react-router-dom';
 import SetupForm from './components/SetupForm';
 import LicenseList from './components/LicenseList';
-import alatLogo from './ALAT.png';
+import LoadingPage from './components/LoadingPage'; 
+import coltLogo from './colt_logo.png'; 
 import synopsysLogo from './synopsys-logo-black-rgb.svg';
-import searchLogo from './search.svg';
+import searchImage from './search.png'; 
 import axios from 'axios';
 
 interface SetupFormWrapperProps {
@@ -20,7 +20,7 @@ const SetupFormWrapper: React.FC<SetupFormWrapperProps> = ({ onSaveCredentials, 
 
   return (
     <SetupForm 
-      onSaveCredentials={(url: string, token: string) => onSaveCredentials(url, token)} // Adjust arguments here
+      onSaveCredentials={(url: string, token: string) => onSaveCredentials(url, token)}
       onSetupComplete={onSetupComplete}
       credentialsExist={credentialsExist}
     />
@@ -52,11 +52,11 @@ const App: React.FC = () => {
     checkCredentials();
   }, [navigate]);
 
-  const handleSaveCredentials = async (url: string, token: string) => { // Adjust function signature
+  const handleSaveCredentials = async (url: string, token: string) => {
     try {
       await axios.post('/api/bd/save-credentials', { url, token });
       setCredentialsExist(true);
-      navigate('/license-list');
+      navigate('/loading'); // Navigate to LoadingPage after saving credentials
     } catch (error) {
       console.error('Failed to save credentials:', error);
     }
@@ -77,28 +77,40 @@ const App: React.FC = () => {
   };
 
   const handleSeedData = async () => {
-    // Function to seed data
+    try {
+      console.log('Seed Licenses button clicked');
+      const response = await axios.post('/api/bd/load-licenses');
+      console.log('Seed licenses response:', response.data);
+    } catch (error) {
+      console.error('Failed to seed licenses:', error);
+    }
   };
 
   const handleClearLicenses = async () => {
-    // Function to clear licenses
+    try {
+      console.log('Clear Licenses button clicked');
+      const response = await axios.post('/api/bd/clear-licenses');
+      console.log('Clear licenses response:', response.data);
+    } catch (error) {
+      console.error('Failed to clear licenses:', error);
+    }
   };
-
+  
   return (
-    <div className="flex min-h-full flex-1 lg:flex-col">
+    <div className="flex min-h-screen">
       <Routes>
         <Route path="/setup" element={
-          <div className="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:flex-none lg:px-20 xl:px-24">
-            <div className="mx-auto w-full max-w-sm lg:w-96">
-              <div className="flex flex-col items-center">
-                <img src={alatLogo} alt="ALATS" className="h-10 w-auto" />
-                <h1 className="mt-8 text-2xl font-bold leading-9 tracking-tight text-gray-900 text-center">
-                  Component License & Terms
-                </h1>
-              </div>
+          <div className="flex flex-1">
+            <div className="w-full lg:w-2/5 flex flex-col justify-center p-8">
               <div className="mt-10">
-                <div className="bg-white p-8 rounded-lg shadow-lg max-w-xl mx-auto">
-                  <img src={synopsysLogo} alt="Synopsys" className="w-48 mb-4 mx-auto" />
+                <div className="bg-white p-8 rounded-lg shadow-lg max-w-full">
+                <div className="flex flex-col items-center">
+                    <h1 className="mt-8 mb-4 text-2xl font-bold leading-9 tracking-tight text-gray-900 text-center">
+                      Component License & Terms
+                    </h1>
+                    <img src={coltLogo} alt="colt" className="h-10 mb-1 w-auto" />
+                  </div>
+                  <img src={synopsysLogo} alt="Synopsys" className="w-48 mx-auto" />
                   <SetupFormWrapper 
                     onSaveCredentials={handleSaveCredentials} 
                     onSetupComplete={handleSetupComplete} 
@@ -106,6 +118,9 @@ const App: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+            <div className="w-full lg:w-3/5">
+              <img src={searchImage} alt="Component License and Terms Search" className="w-full h-full object-cover" />
             </div>
           </div>
         } />
@@ -123,10 +138,12 @@ const App: React.FC = () => {
             </div>
           </div>
         } />
-        <Route path="/" element={<Navigate to={credentialsExist ? "/license-list" : "/setup"} />} /> {/* Adjust Navigate here */}
+        <Route path="/loading" element={<LoadingPage message="Loading licenses..." />} /> {/* Add route for LoadingPage */}
+        <Route path="/" element={<Navigate to={credentialsExist ? "/license-list" : "/setup"} />} />
       </Routes>
     </div>
   );
 };
 
 export default App;
+

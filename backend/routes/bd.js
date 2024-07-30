@@ -3,13 +3,13 @@ const asyncHandler = require('express-async-handler');
 const {
   saveCredentialsToDatabase,
   getCredentialsFromDatabase,
-  testCredentials,
   clearCredentials,
   fetchLicensesFromDatabase,
+  fetchLicenseTermsFromDatabase,
   saveLicensesToDatabase,
   clearLicensesFromDatabase,
   fetchPaginatedLicensesFromDatabase,
-  fetchLicenseCount
+  getLicenseCount,
 } = require('../database/database');
 const { authenticate, fetchAndStoreLicenses, fetchAndStoreLicenseTermsInBackground } = require('../services/bdService');
 const router = express.Router();
@@ -42,6 +42,18 @@ router.post('/test-credentials', asyncHandler(async (req, res) => {
     res.status(500).json({ error: 'Failed to test credentials' });
   }
 }));
+
+// Function to test the credentials
+const testCredentials = async (url, token) => {
+  try {
+    const { bearerToken, csrfToken } = await authenticate(url, token);
+    // If tokens are obtained, credentials are valid
+    return true;
+  } catch (error) {
+    console.error('Error testing credentials:', error.message);
+    return false;
+  }
+};
 
 router.post('/save-credentials', asyncHandler(async (req, res) => {
   const { url, token } = req.body;
@@ -89,14 +101,16 @@ router.get('/licenses', asyncHandler(async (req, res) => {
 
 router.get('/licenses/count', asyncHandler(async (req, res) => {
   try {
-    const count = await fetchLicenseCount();
-    console.log('License count fetched:', count);
-    res.status(200).json({ count });
+    const counts = await getLicenseCount();
+    console.log('License counts fetched:', counts);
+    res.status(200).json(counts);
   } catch (error) {
-    console.error('Failed to fetch license count:', error);
-    res.status(500).json({ error: `Failed to fetch license count: ${error.message}` });
+    console.error('Failed to fetch license counts:', error);
+    res.status(500).json({ error: `Failed to fetch license counts: ${error.message}` });
   }
 }));
+
+module.exports = router;
 
 router.post('/clear-licenses', asyncHandler(async (req, res) => {
   try {
@@ -125,7 +139,7 @@ router.post('/save-licenses', asyncHandler(async (req, res) => {
 router.post('/load-licenses', asyncHandler(async (req, res) => {
   try {
     console.log('Fetching stored credentials...');
-    const credentials = await getCredentials();
+    const credentials = await getCredentialsFromDatabase();
     if (!credentials) {
       console.error('No stored credentials found');
       return res.status(400).send({ error: 'No stored credentials found' });
@@ -152,5 +166,16 @@ router.post('/load-licenses', asyncHandler(async (req, res) => {
     res.status(500).send({ error: `Failed to load licenses: ${error.message}` });
   }
 }));
+
+router.get('/licenses/:licenseId/terms', async (req, res) => {
+  const { licenseId } = req.params;
+  try {
+    const terms = await fetchLicenseTermsFromDatabase(licenseId);
+    res.json(terms);
+  } catch (error) {
+    console.error(`Failed to fetch terms for license ${licenseId}:`, error);
+    res.status(500).json({ error: `Failed to fetch terms for license ${licenseId}` });
+  }
+});
 
 module.exports = router;
