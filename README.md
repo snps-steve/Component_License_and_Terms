@@ -1,4 +1,4 @@
-This is a web application on the following tech stack: Node.js, React, Express, SQLlite3, and Elastic Search
+This is a web application built on the following tech stack: Node.js, React, Express, SQLlite3, and Elastic Search. The application connects to the configured Black Duck server and enumerates all licenses and associated license terms.
 
 Note: the database has been deleted to share the application in a public repository. The database script backend/database/database.js does the work required to initialize the database with the required tables and columns. 
 
